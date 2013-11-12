@@ -35,6 +35,7 @@ def get_color(fg, bg):
                 fg = DEFAULT_FOREGROUND
             if bg == -1:  # -1 is the "default" color
                 bg = DEFAULT_BACKGROUND
+            raise Exception(size, fg, bg)
             curses.init_pair(size, fg, bg)
         COLOR_PAIRS[key] = size
 
