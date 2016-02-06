@@ -41,11 +41,17 @@ class Actions(FileManagerAware, SettingsAware):
     # --------------------------
 
     def exit(self):
-        """Exit the program"""
+        """:exit
+
+        Exit the program.
+        """
         raise SystemExit()
 
     def reset(self):
-        """Reset the filemanager, clearing the directory buffer"""
+        """:reset
+
+        Reset the filemanager, clearing the directory buffer.
+        """
         old_path = self.thisdir.path
         self.previews = {}
         self.garbage_collect(-1)
@@ -55,6 +61,10 @@ class Actions(FileManagerAware, SettingsAware):
             self.metadata.reset()
 
     def change_mode(self, mode):
+        """:change_mode <mode>
+
+        Change mode to "visual" (selection) or "normal" mode.
+        """
         if mode == self.mode:
             return
         if mode == 'visual':
@@ -103,6 +113,10 @@ class Actions(FileManagerAware, SettingsAware):
         raise ValueError("Invalid value `%s' for option `%s'!" % (name, value))
 
     def toggle_visual_mode(self, reverse=False, narg=None):
+        """:toggle_visual_mode
+
+        Toggle the visual mode (see :change_mode).
+        """
         if self.mode == 'normal':
             self._visual_reverse = reverse
             if narg != None:
@@ -112,14 +126,23 @@ class Actions(FileManagerAware, SettingsAware):
             self.change_mode('normal')
 
     def reload_cwd(self):
+        """:reload_cwd
+
+        Reload the current working directory.
+        """
         try:
             cwd = self.thisdir
         except:
             pass
-        cwd.unload()
-        cwd.load_content()
+        else:
+            cwd.unload()
+            cwd.load_content()
 
     def notify(self, text, duration=4, bad=False):
+        """:notify <text>
+
+        Display the text in the statusbar.
+        """
         if isinstance(text, Exception):
             if ranger.arg.debug:
                 raise
@@ -135,6 +158,10 @@ class Actions(FileManagerAware, SettingsAware):
             print(text)
 
     def abort(self):
+        """:abort
+
+        Empty the first queued action.
+        """
         try:
             item = self.loader.queue[0]
         except:
@@ -150,16 +177,25 @@ class Actions(FileManagerAware, SettingsAware):
         self.ui.redraw_main_column()
 
     def redraw_window(self):
-        """Redraw the window"""
+        """:redraw
+
+        Redraw the window.
+        """
         self.ui.redraw_window()
 
     def open_console(self, string='', prompt=None, position=None):
-        """Open the console"""
+        """:open_console [string]
+
+        Open the console.
+        """
         self.change_mode('normal')
         self.ui.open_console(string, prompt=prompt, position=position)
 
     def execute_console(self, string='', wildcards=[], quantifier=None):
-        """Execute a command for the console"""
+        """:execute_console [string]
+
+        Execute a command for the console
+        """
         command_name = string.lstrip().split()[0]
         cmd_class = self.commands.get_command(command_name, abbrev=False)
         if cmd_class is None:
@@ -217,8 +253,11 @@ class Actions(FileManagerAware, SettingsAware):
             macros['f'] = MACRO_FAIL
 
         if self.fm.thistab.get_selection:
+            macros['p'] = [os.path.join(self.fm.thisdir.path, fl.relative_path)
+                    for fl in self.fm.thistab.get_selection()]
             macros['s'] = [fl.relative_path for fl in self.fm.thistab.get_selection()]
         else:
+            macros['p'] = MACRO_FAIL
             macros['s'] = MACRO_FAIL
 
         if self.fm.copy_buffer:
@@ -237,7 +276,7 @@ class Actions(FileManagerAware, SettingsAware):
         else:
             macros['d'] = '.'
 
-        # define d/f/s macros for each tab
+        # define d/f/p/s macros for each tab
         for i in range(1,10):
             try:
                 tab = self.fm.tabs[i]
@@ -249,15 +288,18 @@ class Actions(FileManagerAware, SettingsAware):
             i = str(i)
             macros[i + 'd'] = tabdir.path
             if tabdir.get_selection():
+                macros[i + 'p'] = [os.path.join(tabdir.path, fl.relative_path)
+                        for fl in tabdir.get_selection()]
                 macros[i + 's'] = [fl.path for fl in tabdir.get_selection()]
             else:
+                macros[i + 'p'] = MACRO_FAIL
                 macros[i + 's'] = MACRO_FAIL
             if tabdir.pointed_obj:
                 macros[i + 'f'] = tabdir.pointed_obj.path
             else:
                 macros[i + 'f'] = MACRO_FAIL
 
-        # define D/F/S for the next tab
+        # define D/F/P/S for the next tab
         found_current_tab = False
         next_tab = None
         first_tab = None
@@ -280,8 +322,11 @@ class Actions(FileManagerAware, SettingsAware):
             else:
                 macros['F'] = MACRO_FAIL
             if next_tab_dir.get_selection():
+                macros['P'] = [os.path.join(next_tab.path, fl.path)
+                        for fl in next_tab.get_selection()]
                 macros['S'] = [fl.path for fl in next_tab.get_selection()]
             else:
+                macros['P'] = MACRO_FAIL
                 macros['S'] = MACRO_FAIL
         else:
             macros['D'] = MACRO_FAIL
@@ -291,6 +336,10 @@ class Actions(FileManagerAware, SettingsAware):
         return macros
 
     def source(self, filename):
+        """:source <filename>
+
+        Load a config file.
+        """
         filename = os.path.expanduser(filename)
         for line in open(filename, 'r'):
             line = line.lstrip().rstrip("\r\n")
@@ -538,12 +587,18 @@ class Actions(FileManagerAware, SettingsAware):
         self.execute_file(file, label='editor')
 
     def toggle_option(self, string):
-        """Toggle a boolean option named <string>"""
+        """:toggle_option <string>
+
+        Toggle a boolean option named <string>.
+        """
         if isinstance(self.settings[string], bool):
             self.settings[string] ^= True
 
     def set_option(self, optname, value):
-        """Set the value of an option named <optname>"""
+        """:set_option <optname>
+
+        Set the value of an option named <optname>.
+        """
         self.settings[optname] = value
 
     def sort(self, func=None, reverse=None):
@@ -680,6 +735,10 @@ class Actions(FileManagerAware, SettingsAware):
     # file is important to you in any context.
 
     def tag_toggle(self, paths=None, value=None, movedown=None, tag=None):
+        """:tag_toggle <character>
+
+        Toggle a tag <character>.
+        """
         if not self.tags:
             return
         if paths is None:
@@ -799,14 +858,11 @@ class Actions(FileManagerAware, SettingsAware):
             return
 
         pager = self.ui.open_pager()
-        if self.settings.preview_images and self.thisfile.image:
-            pager.set_image(self.thisfile.realpath)
+        f = self.thisfile.get_preview_source(pager.wid, pager.hei)
+        if self.thisfile.is_image_preview():
+            pager.set_image(f)
         else:
-            f = self.thisfile.get_preview_source(pager.wid, pager.hei)
-            if self.thisfile.is_image_preview():
-                pager.set_image(f)
-            else:
-                pager.set_source(f)
+            pager.set_source(f)
 
     # --------------------------
     # -- Previews
@@ -820,12 +876,12 @@ class Actions(FileManagerAware, SettingsAware):
 
     if version_info[0] == 3:
         def sha1_encode(self, path):
-            return os.path.join(ranger.CACHEDIR,
+            return os.path.join(ranger.arg.cachedir,
                     sha1(path.encode('utf-8', 'backslashreplace')) \
                             .hexdigest()) + '.jpg'
     else:
         def sha1_encode(self, path):
-            return os.path.join(ranger.CACHEDIR,
+            return os.path.join(ranger.arg.cachedir,
                     sha1(path).hexdigest()) + '.jpg'
 
     def get_preview(self, file, width, height):
@@ -833,10 +889,6 @@ class Actions(FileManagerAware, SettingsAware):
         path = file.realpath
 
         if not path or not os.path.exists(path):
-            return None
-
-        if self.settings.preview_images and file.image:
-            pager.set_image(path)
             return None
 
         if self.settings.preview_script and self.settings.use_preview_script:
@@ -874,7 +926,14 @@ class Actions(FileManagerAware, SettingsAware):
 
                 data['loading'] = True
 
-                cacheimg = os.path.join(ranger.CACHEDIR, self.sha1_encode(path))
+                if 'directimagepreview' in data:
+                    data['foundpreview'] = True
+                    data['imagepreview'] = True
+                    pager.set_image(path)
+                    data['loading'] = False
+                    return path
+
+                cacheimg = os.path.join(ranger.arg.cachedir, self.sha1_encode(path))
                 if (os.path.isfile(cacheimg) and os.path.getmtime(cacheimg) > os.path.getmtime(path)):
                     data['foundpreview'] = True
                     data['imagepreview'] = True
@@ -883,7 +942,8 @@ class Actions(FileManagerAware, SettingsAware):
                     return cacheimg
 
                 loadable = CommandLoader(args=[self.settings.preview_script,
-                    path, str(width), str(height), cacheimg], read=True,
+                    path, str(width), str(height), cacheimg,
+                    str(self.settings.preview_images)], read=True,
                     silent=True, descr="Getting preview of %s" % path)
                 def on_after(signal):
                     exit = signal.process.poll()
@@ -899,6 +959,8 @@ class Actions(FileManagerAware, SettingsAware):
                         data[(-1, -1)] = content
                     elif exit == 6:
                         data['imagepreview'] = True
+                    elif exit == 7:
+                        data['directimagepreview'] = True
                     elif exit == 1:
                         data[(-1, -1)] = None
                         data['foundpreview'] = False
@@ -922,6 +984,9 @@ class Actions(FileManagerAware, SettingsAware):
                         if 'imagepreview' in data:
                             pager.set_image(cacheimg)
                             return cacheimg
+                        elif 'directimagepreview' in data:
+                            pager.set_image(path)
+                            return path
                         else:
                             pager.set_source(self.thisfile.get_preview_source(
                                 pager.wid, pager.hei))
@@ -1107,8 +1172,10 @@ class Actions(FileManagerAware, SettingsAware):
         for cmd_name in sorted(self.commands.commands):
             cmd = self.commands.commands[cmd_name]
             if hasattr(cmd, '__doc__') and cmd.__doc__:
-                write(cleandoc(cmd.__doc__))
-                write("\n\n" + "-" * 60 + "\n")
+                doc = cleandoc(cmd.__doc__)
+                if doc[0] == ':':
+                    write(doc)
+                    write("\n\n" + "-" * 60 + "\n")
             else:
                 undocumented.append(cmd)
 
@@ -1138,12 +1205,20 @@ class Actions(FileManagerAware, SettingsAware):
     # --------------------------
 
     def uncut(self):
+        """:uncut
+
+        Empty the copy buffer.
+        """
         self.copy_buffer = set()
         self.do_cut = False
         self.ui.browser.main_column.request_redraw()
 
     def copy(self, mode='set', narg=None, dirarg=None):
-        """Copy the selected items.  Modes are: 'set', 'add', 'remove'."""
+        """:copy [mode=set]
+
+        Copy the selected items.
+        Modes are: 'set', 'add', 'remove'.
+        """
         assert mode in ('set', 'add', 'remove')
         cwd = self.thisdir
         if not narg and not dirarg:
@@ -1170,6 +1245,11 @@ class Actions(FileManagerAware, SettingsAware):
         self.ui.browser.main_column.request_redraw()
 
     def cut(self, mode='set', narg=None, dirarg=None):
+        """:cut [mode=set]
+
+        Cut the selected items.
+        Modes are: 'set, 'add, 'remove.
+        """
         self.copy(mode=mode, narg=narg, dirarg=dirarg)
         self.do_cut = True
         self.ui.browser.main_column.request_redraw()
@@ -1218,28 +1298,38 @@ class Actions(FileManagerAware, SettingsAware):
                     next_available_filename(target_path))
 
     def paste(self, overwrite=False, append=False):
-        """Paste the selected items into the current directory"""
+        """:paste
+
+        Paste the selected items into the current directory.
+        """
         loadable = CopyLoader(self.copy_buffer, self.do_cut, overwrite)
         self.loader.add(loadable, append=append)
         self.do_cut = False
 
-    def delete(self):
+    def delete(self, files=None):
         # XXX: warn when deleting mount points/unseen marked files?
         self.notify("Deleting!")
-        selected = self.thistab.get_selection()
-        self.copy_buffer -= set(selected)
-        if selected:
-            for f in selected:
-                if isdir(f.path) and not os.path.islink(f.path):
-                    try:
-                        shutil.rmtree(f.path)
-                    except OSError as err:
-                        self.notify(err)
-                else:
-                    try:
-                        os.remove(f.path)
-                    except OSError as err:
-                        self.notify(err)
+        # COMPAT: old command.py use fm.delete() without arguments
+        if files is None:
+            files = (f.path for f in self.thistab.get_selection())
+        files = [os.path.abspath(f) for f in files]
+        for f in files:
+            # Untag the deleted files.
+            for tag in self.fm.tags.tags:
+                if str(tag).startswith(f):
+                    self.fm.tags.remove(tag)
+        self.copy_buffer = set(filter(lambda f: f.path not in files, self.copy_buffer))
+        for f in files:
+            if isdir(f) and not os.path.islink(f):
+                try:
+                    shutil.rmtree(f)
+                except OSError as err:
+                    self.notify(err)
+            else:
+                try:
+                    os.remove(f)
+                except OSError as err:
+                    self.notify(err)
         self.thistab.ensure_correct_pointer()
 
     def mkdir(self, name):

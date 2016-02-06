@@ -6,6 +6,7 @@ from time import time, sleep
 from subprocess import Popen, PIPE
 from ranger.core.shared import FileManagerAware
 from ranger.ext.signals import SignalDispatcher
+from ranger.ext.human_readable import human_readable
 import math
 import os.path
 import sys
@@ -77,13 +78,14 @@ class CopyLoader(Loadable, FileManagerAware):
             # TODO: Don't calculate size when renaming (needs detection)
             bytes_per_tick = shutil_g.BLOCK_SIZE
             size = max(1, self._calculate_size(bytes_per_tick))
-            bar_tick = 100.0 / (float(size) / bytes_per_tick)
+            size_str = " (" + human_readable(self._calculate_size(1)) + ")"
+            done = 0
             if self.do_cut:
                 self.original_copy_buffer.clear()
                 if len(self.copy_buffer) == 1:
-                    self.description = "moving: " + self.one_file.path
+                    self.description = "moving: " + self.one_file.path + size_str
                 else:
-                    self.description = "moving files from: " + self.one_file.dirname
+                    self.description = "moving files from: " + self.one_file.dirname + size_str
                 for f in self.copy_buffer:
                     for tf in self.fm.tags.tags:
                         if tf == f.path or str(tf).startswith(f.path):
@@ -92,30 +94,36 @@ class CopyLoader(Loadable, FileManagerAware):
                             self.fm.tags.tags[tf.replace(f.path, self.original_path \
                                     + '/' + f.basename)] = tag
                             self.fm.tags.dump()
-                    for _ in shutil_g.move(src=f.path,
+                    d = 0
+                    for d in shutil_g.move(src=f.path,
                             dst=self.original_path,
                             overwrite=self.overwrite):
-                        self.percent += bar_tick
+                        self.percent = float(done + d) / size * 100.
                         yield
+                    done += d
             else:
                 if len(self.copy_buffer) == 1:
-                    self.description = "copying: " + self.one_file.path
+                    self.description = "copying: " + self.one_file.path + size_str
                 else:
-                    self.description = "copying files from: " + self.one_file.dirname
+                    self.description = "copying files from: " + self.one_file.dirname + size_str
                 for f in self.copy_buffer:
                     if os.path.isdir(f.path) and not os.path.islink(f.path):
-                        for _ in shutil_g.copytree(src=f.path,
+                        d = 0
+                        for d in shutil_g.copytree(src=f.path,
                                 dst=os.path.join(self.original_path, f.basename),
                                 symlinks=True,
                                 overwrite=self.overwrite):
-                            self.percent += bar_tick
+                            self.percent = float(done + d) / size * 100.
                             yield
+                        done += d
                     else:
-                        for _ in shutil_g.copy2(f.path, self.original_path,
+                        d = 0
+                        for d in shutil_g.copy2(f.path, self.original_path,
                                 symlinks=True,
                                 overwrite=self.overwrite):
-                            self.percent += bar_tick
+                            self.percent = float(done + d) / size * 100.
                             yield
+                        done += d
             cwd = self.fm.get_directory(self.original_path)
             cwd.load_content()
 

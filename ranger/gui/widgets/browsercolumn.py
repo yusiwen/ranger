@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # This file is part of ranger, the console file manager.
 # License: GNU GPL version 3, see the file "AUTHORS" for details.
 
@@ -7,6 +6,7 @@
 import curses
 import stat
 from time import time
+from os.path import splitext
 
 from . import Widget
 from .pager import Pager
@@ -23,7 +23,6 @@ class BrowserColumn(Pager):
     scroll_begin = 0
     target = None
     last_redraw_time = -1
-    ellipsis = { False: '~', True: '…' }
 
     old_dir = None
     old_thisfile = None
@@ -180,19 +179,15 @@ class BrowserColumn(Pager):
             Pager.close(self)
             return
 
-        if self.fm.settings.preview_images and self.target.image:
-            self.set_image(self.target.realpath)
-            Pager.draw(self)
+        f = self.target.get_preview_source(self.wid, self.hei)
+        if f is None:
+            Pager.close(self)
         else:
-            f = self.target.get_preview_source(self.wid, self.hei)
-            if f is None:
-                Pager.close(self)
+            if self.target.is_image_preview():
+                self.set_image(f)
             else:
-                if self.target.is_image_preview():
-                    self.set_image(f)
-                else:
-                    self.set_source(f)
-                Pager.draw(self)
+                self.set_source(f)
+            Pager.draw(self)
 
     def _draw_directory(self):
         """Draw the contents of a directory"""
@@ -346,7 +341,11 @@ class BrowserColumn(Pager):
 
     def _draw_text_display(self, text, space):
         wtext = WideString(text)
+        wext = WideString(splitext(text)[1])
         wellip = WideString(self.ellipsis[self.settings.unicode_ellipsis])
+        if len(wtext) > space:
+            wtext = wtext[:max(1, space - len(wext) - len(wellip))] + wellip + wext
+        # Truncate again if still too long.
         if len(wtext) > space:
             wtext = wtext[:max(0, space - len(wellip))] + wellip
 

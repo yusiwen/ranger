@@ -19,7 +19,7 @@ import re
 from subprocess import Popen, PIPE
 import sys
 
-__version__ = 'rifle 1.7.1'
+__version__ = 'rifle 1.7.2'
 
 # Options and constants that a user might want to change:
 DEFAULT_PAGER = 'less'
@@ -195,8 +195,11 @@ class Rifle(object):
         argument = rule[1] if len(rule) > 1 else ''
 
         if function == 'ext':
-            extension = os.path.basename(files[0]).rsplit('.', 1)[-1].lower()
-            return bool(re.search('^(' + argument + ')$', extension))
+            if os.path.isfile(files[0]):
+                partitions = os.path.basename(files[0]).rpartition('.')
+                if not partitions[0]:
+                    return False
+                return bool(re.search('^(' + argument + ')$', partitions[2].lower()))
         elif function == 'name':
             return bool(re.search(argument, os.path.basename(files[0])))
         elif function == 'match':
@@ -231,7 +234,7 @@ class Rifle(object):
             self._app_flags = argument
             return True
         elif function == 'X':
-            return 'DISPLAY' in os.environ
+            return sys.platform == 'darwin' or 'DISPLAY' in os.environ
         elif function == 'env':
             return bool(os.environ.get(argument))
         elif function == 'else':

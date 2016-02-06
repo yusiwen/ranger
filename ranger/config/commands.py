@@ -21,10 +21,12 @@
 # ===================================================================
 # Every class defined here which is a subclass of `Command' will be used as a
 # command in ranger.  Several methods are defined to interface with ranger:
-#   execute(): called when the command is executed.
-#   cancel():  called when closing the console.
-#   tab():     called when <TAB> is pressed.
-#   quick():   called after each keypress.
+#   execute():   called when the command is executed.
+#   cancel():    called when closing the console.
+#   tab(tabnum): called when <TAB> is pressed.
+#   quick():     called after each keypress.
+#
+# tab() argument tabnum is 1 for <TAB> and -1 for <S-TAB> by default
 #
 # The return values for tab() can be either:
 #   None: There is no tab completion
@@ -98,6 +100,16 @@ class alias(Command):
         else:
             self.fm.commands.alias(self.arg(1), self.rest(2))
 
+
+class echo(Command):
+    """:echo <text>
+
+    Display the text in the statusbar.
+    """
+    def execute(self):
+        self.fm.notify(self.rest(1))
+
+
 class cd(Command):
     """:cd [-r] <dirname>
 
@@ -125,7 +137,7 @@ class cd(Command):
         else:
             self.fm.cd(destination)
 
-    def tab(self):
+    def tab(self, tabnum):
         import os
         from os.path import dirname, basename, expanduser, join
 
@@ -204,7 +216,7 @@ class shell(Command):
                 command = self.fm.substitute_macros(command, escape=True)
             self.fm.execute_command(command, flags=flags)
 
-    def tab(self):
+    def tab(self, tabnum):
         from ranger.ext.get_executables import get_executables
         if self.arg(1) and self.arg(1)[0] == '-':
             command = self.rest(2)
@@ -226,7 +238,7 @@ class shell(Command):
         else:
             before_word, start_of_word = self.line.rsplit(' ', 1)
             return (before_word + ' ' + file.shell_escaped_basename \
-                    for file in self.fm.thisdir.files \
+                    for file in self.fm.thisdir.files or [] \
                     if file.shell_escaped_basename.startswith(start_of_word))
 
 class open_with(Command):
@@ -238,7 +250,7 @@ class open_with(Command):
                 flags = flags,
                 mode = mode)
 
-    def tab(self):
+    def tab(self, tabnum):
         return self._tab_through_executables()
 
     def _get_app_flags_mode(self, string):
@@ -335,19 +347,19 @@ class set_(Command):
         name, value, _ = self.parse_setting_line()
         self.fm.set_option_from_string(name, value)
 
-    def tab(self):
+    def tab(self, tabnum):
         from ranger.gui.colorscheme import get_all_colorschemes
         name, value, name_done = self.parse_setting_line()
         settings = self.fm.settings
         if not name:
             return sorted(self.firstpart + setting for setting in settings)
         if not value and not name_done:
-            return (self.firstpart + setting for setting in settings \
+            return sorted(self.firstpart + setting for setting in settings \
                     if setting.startswith(name))
         if not value:
             # Cycle through colorschemes when name, but no value is specified
             if name == "colorscheme":
-                return (self.firstpart + colorscheme for colorscheme \
+                return sorted(self.firstpart + colorscheme for colorscheme \
                         in get_all_colorschemes())
             return self.firstpart + str(settings[name])
         if bool in settings.types_of(name):
@@ -357,12 +369,12 @@ class set_(Command):
                 return self.firstpart + 'False'
         # Tab complete colorscheme values if incomplete value is present
         if name == "colorscheme":
-            return (self.firstpart + colorscheme for colorscheme \
+            return sorted(self.firstpart + colorscheme for colorscheme \
                     in get_all_colorschemes() if colorscheme.startswith(value))
 
 
 class setlocal(set_):
-    """:setlocal path=<python string> <option name>=<python expression>
+    """:setlocal path=<regular expression> <option name>=<python expression>
 
     Gives an option a new value.
     """
@@ -432,7 +444,7 @@ class default_linemode(Command):
             for col in self.fm.ui.browser.columns:
                 col.need_redraw = True
 
-    def tab(self):
+    def tab(self, tabnum):
         mode = self.arg(1)
         return (self.arg(0) + " " + linemode
                 for linemode in self.fm.thisfile.linemode_dict.keys()
@@ -489,7 +501,8 @@ class terminal(Command):
 class delete(Command):
     """:delete
 
-    Tries to delete the selection.
+    Tries to delete the selection or the files passed in arguments (if any).
+    The arguments use a shell-like escaping.
 
     "Selection" is defined as all the "marked files" (by default, you
     can mark files with space or v). If there are no marked files,
@@ -500,41 +513,49 @@ class delete(Command):
     """
 
     allow_abbrev = False
+    escape_macros_for_shell = True
 
     def execute(self):
         import os
-        if self.rest(1):
-            self.fm.notify("Error: delete takes no arguments! It deletes "
-                    "the selected file(s).", bad=True)
-            return
+        import shlex
+        from functools import partial
+        from ranger.container.file import File
 
-        cwd = self.fm.thisdir
-        cf = self.fm.thisfile
-        if not cwd or not cf:
-            self.fm.notify("Error: no file selected for deletion!", bad=True)
-            return
+        def is_directory_with_files(f):
+            import os.path
+            return (os.path.isdir(f) and not os.path.islink(f) \
+                and len(os.listdir(f)) > 0)
+
+        if self.rest(1):
+            files = shlex.split(self.rest(1))
+            many_files = (len(files) > 1 or is_directory_with_files(files[0]))
+        else:
+            cwd = self.fm.thisdir
+            cf = self.fm.thisfile
+            if not cwd or not cf:
+                self.fm.notify("Error: no file selected for deletion!", bad=True)
+                return
+
+            # relative_path used for a user-friendly output in the confirmation.
+            files = [f.relative_path for f in self.fm.thistab.get_selection()]
+            many_files = (cwd.marked_items or is_directory_with_files(cf.path))
 
         confirm = self.fm.settings.confirm_on_delete
-        many_files = (cwd.marked_items or (cf.is_directory and not cf.is_link \
-                and len(os.listdir(cf.path)) > 0))
-
         if confirm != 'never' and (confirm != 'multiple' or many_files):
+            filename_list = files
             self.fm.ui.console.ask("Confirm deletion of: %s (y/N)" %
-                ', '.join(f.relative_path for f in self.fm.thistab.get_selection()),
-                self._question_callback, ('n', 'N', 'y', 'Y'))
+                ', '.join(files),
+                partial(self._question_callback, files), ('n', 'N', 'y', 'Y'))
         else:
             # no need for a confirmation, just delete
-            for f in self.fm.tags.tags:
-                if str(f).startswith(self.fm.thisfile.path):
-                    self.fm.tags.remove(f)
-            self.fm.delete()
+            self.fm.delete(files)
 
-    def _question_callback(self, answer):
+    def tab(self, tabnum):
+        return self._tab_directory_content()
+
+    def _question_callback(self, files, answer):
         if answer == 'y' or answer == 'Y':
-            for f in self.fm.tags.tags:
-                if str(f).startswith(self.fm.thisfile.path):
-                    self.fm.tags.remove(f)
-            self.fm.delete()
+            self.fm.delete(files)
 
 
 class mark_tag(Command):
@@ -548,7 +569,7 @@ class mark_tag(Command):
     def execute(self):
         cwd = self.fm.thisdir
         tags = self.rest(1).replace(" ","")
-        if not self.fm.tags:
+        if not self.fm.tags or not cwd.files:
             return
         for fileobj in cwd.files:
             try:
@@ -641,7 +662,7 @@ class mkdir(Command):
         else:
             self.fm.notify("file/directory exists!", bad=True)
 
-    def tab(self):
+    def tab(self, tabnum):
         return self._tab_directory_content()
 
 
@@ -660,7 +681,7 @@ class touch(Command):
         else:
             self.fm.notify("file/directory exists!", bad=True)
 
-    def tab(self):
+    def tab(self, tabnum):
         return self._tab_directory_content()
 
 
@@ -676,7 +697,7 @@ class edit(Command):
         else:
             self.fm.edit_file(self.rest(1))
 
-    def tab(self):
+    def tab(self, tabnum):
         return self._tab_directory_content()
 
 
@@ -750,13 +771,21 @@ class rename(Command):
 
         if self.fm.rename(self.fm.thisfile, new_name):
             f = File(new_name)
+            # Update bookmarks that were pointing on the previous name
+            obsoletebookmarks = [b for b in self.fm.bookmarks
+                                 if b[1].path == self.fm.thisfile]
+            if obsoletebookmarks:
+                for key, _ in obsoletebookmarks:
+                    self.fm.bookmarks[key] = f
+                self.fm.bookmarks.update_if_outdated()
+
             self.fm.thisdir.pointed_obj = f
             self.fm.thisfile = f
             for t in tagged:
                 self.fm.tags.tags[t.replace(old_name,new_name)] = tagged[t]
                 self.fm.tags.dump()
 
-    def tab(self):
+    def tab(self, tabnum):
         return self._tab_directory_content()
 
 class rename_append(Command):
@@ -767,10 +796,11 @@ class rename_append(Command):
 
     def execute(self):
         cf = self.fm.thisfile
-        if cf.relative_path.find('.') != 0 and cf.relative_path.rfind('.') != -1 and not cf.is_directory:
-            self.fm.open_console('rename ' + cf.relative_path, position=(7 + cf.relative_path.rfind('.')))
+        path = cf.relative_path.replace("%", "%%")
+        if path.find('.') != 0 and path.rfind('.') != -1 and not cf.is_directory:
+            self.fm.open_console('rename ' + path, position=(7 + path.rfind('.')))
         else:
-            self.fm.open_console('rename ' + cf.relative_path)
+            self.fm.open_console('rename ' + path)
 
 class chmod(Command):
     """:chmod <octal number>
@@ -920,7 +950,7 @@ class relink(Command):
         self.fm.thisdir.pointed_obj = cf
         self.fm.thisfile = cf
 
-    def tab(self):
+    def tab(self, tabnum):
         if not self.rest(1):
             return self.line+os.readlink(self.fm.thisfile.path)
         else:
@@ -1127,7 +1157,7 @@ class scout(Command):
         self.fm.thistab.last_search = regex
         self.fm.set_search_method(order="search")
 
-        if self.MARK in flags or self.UNMARK in flags:
+        if (self.MARK in flags or self.UNMARK in flags) and thisdir.files:
             value = flags.find(self.MARK) > flags.find(self.UNMARK)
             if self.FILTER in flags:
                 for f in thisdir.files:
@@ -1176,8 +1206,8 @@ class scout(Command):
             return True
         return False
 
-    def tab(self):
-        self._count(move=True, offset=1)
+    def tab(self, tabnum):
+        self._count(move=True, offset=tabnum)
 
     def _build_regex(self):
         if self._regex is not None:
@@ -1230,7 +1260,7 @@ class scout(Command):
         cwd     = self.fm.thisdir
         pattern = self.pattern
 
-        if not pattern:
+        if not pattern or not cwd.files:
             return 0
         if pattern == '.':
             return 0
@@ -1467,7 +1497,7 @@ class meta(prompt_metadata):
             self.fm.metadata.set_metadata(f.path, update_dict)
         self._process_command_stack()
 
-    def tab(self):
+    def tab(self, tabnum):
         key = self.arg(1)
         metadata = self.fm.metadata.get_metadata(self.fm.thisfile.path)
         if key in metadata and metadata[key]:
